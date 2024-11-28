@@ -1,0 +1,155 @@
+import os
+from Crypto.Cipher import AES, PKCS1_OAEP
+from Crypto.PublicKey import RSA
+from Crypto.Random import get_random_bytes
+from Crypto.Util.Padding import pad, unpad
+import base64
+
+class CryptoTool:
+
+    def __init__(self, key_size=16):
+        """
+        Initializes the tool with either AES or RSA encryption methods.
+        AES key size is set by default to 16 bytes (128-bit).
+        """
+        self.key_size = key_size  # AES key size
+        self.aes_key = None
+
+    # AES Encryption and Decryption methods
+
+    def aes_encrypt_message(self, message):
+        """ Encrypt a message with AES (CBC mode). """
+        self.aes_key = get_random_bytes(self.key_size)
+        cipher = AES.new(self.aes_key, AES.MODE_CBC)
+        padded_message = pad(message.encode(), AES.block_size)
+        encrypted_msg = cipher.encrypt(padded_message)
+
+        # Encrypt the message and return both the ciphertext and IV
+        encrypted_msg_base64 = base64.b64encode(encrypted_msg).decode('utf-8')
+        iv_base64 = base64.b64encode(cipher.iv).decode('utf-8')
+
+        return iv_base64, encrypted_msg_base64
+
+    def aes_decrypt_message(self, iv_base64, encrypted_msg_base64):
+        """ Decrypt a message with AES using the provided IV and ciphertext. """
+        iv = base64.b64decode(iv_base64)
+        encrypted_msg = base64.b64decode(encrypted_msg_base64)
+        
+        cipher = AES.new(self.aes_key, AES.MODE_CBC, iv)
+        decrypted_msg = unpad(cipher.decrypt(encrypted_msg), AES.block_size)
+
+        return decrypted_msg.decode()
+
+    # RSA Encryption and Decryption methods
+
+    def generate_rsa_keys(self):
+        """ Generate and return a public/private RSA key pair. """
+        rsa_key = RSA.generate(2048)
+        private_key = rsa_key.export_key()
+        public_key = rsa_key.publickey().export_key()
+        return private_key, public_key
+
+    def rsa_encrypt_message(self, message, public_key):
+        """ Encrypt a message with RSA using the provided public key. """
+        rsa_public_key = RSA.import_key(public_key)
+        cipher = PKCS1_OAEP.new(rsa_public_key)
+        encrypted_message = cipher.encrypt(message.encode())
+        return base64.b64encode(encrypted_message).decode('utf-8')
+
+    def rsa_decrypt_message(self, encrypted_message_base64, private_key):
+        """ Decrypt an RSA encrypted message with the private key. """
+        private_key = RSA.import_key(private_key)
+        cipher = PKCS1_OAEP.new(private_key)
+        encrypted_message = base64.b64decode(encrypted_message_base64)
+        decrypted_message = cipher.decrypt(encrypted_message)
+        return decrypted_message.decode()
+
+    # File Encryption and Decryption methods
+
+    def encrypt_file(self, file_path, algorithm='AES'):
+        """ Encrypt a file using either AES or RSA. """
+        try:
+            with open(file_path, 'rb') as file:
+                file_data = file.read()
+
+            if algorithm == 'AES':
+                iv, encrypted_data = self.aes_encrypt_message(file_data.decode())
+                with open(file_path + '.enc', 'w') as enc_file:
+                    enc_file.write(f"{iv}\n{encrypted_data}")
+                return "File encrypted successfully with AES."
+            elif algorithm == 'RSA':
+                raise NotImplementedError("RSA file encryption is not implemented yet.")
+
+        except FileNotFoundError:
+            return f"Error: The file '{file_path}' does not exist."
+        except Exception as e:
+            return f"An unexpected error occurred: {str(e)}"
+
+    def decrypt_file(self, file_path, algorithm='AES'):
+        """ Decrypt a file using either AES or RSA. """
+        try:
+            with open(file_path, 'r') as file:
+                file_data = file.read().splitlines()
+
+            iv_base64, encrypted_data_base64 = file_data[0], file_data[1]
+
+            if algorithm == 'AES':
+                decrypted_message = self.aes_decrypt_message(iv_base64, encrypted_data_base64)
+                return decrypted_message
+            elif algorithm == 'RSA':
+                raise NotImplementedError("RSA file decryption is not implemented yet.")
+        except FileNotFoundError:
+            return f"Error: The file '{file_path}' does not exist."
+        except Exception as e:
+            return f"An unexpected error occurred: {str(e)}"
+
+
+# Main driver to test the crypto tool
+
+def main():
+    crypto_tool = CryptoTool()
+
+    # Testing AES Encryption/Decryption
+    print("AES Encryption/Decryption Test")
+
+    # Encrypt a message with AES
+    message = "This is a secret message that needs encryption!"
+    iv, encrypted_msg = crypto_tool.aes_encrypt_message(message)
+    print(f"AES Encrypted Message: {encrypted_msg}")
+    print(f"IV (Base64): {iv}")
+
+    # Decrypt the message back
+    decrypted_msg = crypto_tool.aes_decrypt_message(iv, encrypted_msg)
+    print(f"AES Decrypted Message: {decrypted_msg}\n")
+
+    # Testing RSA Encryption/Decryption
+    print("RSA Encryption/Decryption Test")
+    
+    # Generate RSA keys
+    private_key, public_key = crypto_tool.generate_rsa_keys()
+    
+    # Encrypt a message with RSA
+    rsa_encrypted_msg = crypto_tool.rsa_encrypt_message(message, public_key)
+    print(f"RSA Encrypted Message: {rsa_encrypted_msg}")
+
+    # Decrypt the message back
+    rsa_decrypted_msg = crypto_tool.rsa_decrypt_message(rsa_encrypted_msg, private_key)
+    print(f"RSA Decrypted Message: {rsa_decrypted_msg}\n")
+
+    # File Encryption (AES) and Decryption
+    print("File Encryption/Decryption Test")
+    # Assuming you have a text file at 'test.txt' with some content
+    # File path is just for demonstration, modify as needed
+    file_path = 'test.txt'
+
+    # Encrypt file
+    result = crypto_tool.encrypt_file(file_path, algorithm='AES')
+    print(result)
+
+    # Decrypt file (if the encrypted file exists)
+    decrypted_content = crypto_tool.decrypt_file(file_path + '.enc', algorithm='AES')
+    print(f"Decrypted file content: {decrypted_content}")
+
+
+if __name__ == '__main__':
+    main()
